@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "claude-reel-editor",
+  "description": "Raw footage to publish-ready reels with Claude Code + HyperFrames.",
+  "owner": { "name": "Mereyani", "url": "https://github.com/Mereyani" },
+  "plugins": [
+    {
+      "name": "reel-editor",
+      "version": "0.1.0",
+      "source": "./",
+      "description": "Edit raw talking-head footage into a publish-ready reel: silence cuts, word-timed captions, reframes, motion-graphic interludes. Strong Arabic/RTL support.",
+      "homepage": "https://github.com/Mereyani/claude-reel-editor",
+      "license": "MIT",
+      "keywords": ["video-editing", "reels", "captions", "hyperframes", "arabic"]
+    }
+  ]
+}
