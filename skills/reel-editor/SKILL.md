@@ -1,6 +1,6 @@
 ---
 name: reel-editor
-description: Edit raw talking-head footage into a finished, publish-ready short video (Reels / TikTok / Shorts, or 16:9) — silence removal, jump cuts, punch-in reframes, word-timed captions, full-screen motion-graphic interludes, split screens, audio leveling, preview, render — built as code with HyperFrames. Also executes editing directions the speaker says out loud in the recording ("cut this shot", "zoom on my face here", "show my website here"). Use this whenever the user drops a raw recording and wants it edited, "montaged", cut, captioned, turned into a reel, or "made ready to post", even if they never say HyperFrames. Strong on Arabic/RTL captions (مونتاج، ريلز، شيل الصمت، كابشنز، قص، زوم). Not for generating video from nothing with no footage (use the HyperFrames router), and not for editing an existing NLE project (Premiere/Resolve/CapCut files).
+description: Edit raw talking-head footage into a finished, publish-ready short video (Reels / TikTok / Shorts, or 16:9) — silence removal, jump cuts, punch-in reframes, word-timed captions, full-screen motion-graphic interludes, split screens, audio leveling, preview, render — built as code with HyperFrames. Also executes editing directions the speaker says out loud in the recording ("cut this shot", "zoom on my face here", "show my website here"), makes voice-only "faceless" versions, and copies the editing style of a reference reel the user links ("edit it like this reel"). Use this whenever the user drops a raw recording and wants it edited, "montaged", cut, captioned, turned into a reel, or "made ready to post", even if they never say HyperFrames. Strong on Arabic/RTL captions (مونتاج، ريلز، شيل الصمت، كابشنز، قص، زوم). Not for generating video from nothing with no footage (use the HyperFrames router), and not for editing an existing NLE project (Premiere/Resolve/CapCut files).
 ---
 
 # Reel Editor
@@ -32,7 +32,7 @@ Defaults, confirmed in **one** message only if genuinely ambiguous:
 - **Mode** — `full` (default): cuts + captions + reframes + graphic interludes. `quick`: cuts + captions + reframes only; several times cheaper, good for daily posting. `faceless`: the speaker never appears — their voice plays over continuous motion graphics (see `editing-rules.md` → *Faceless mode*). Users ask for it as "without my face", "بدون وجهي", "voice only", "صوت وجرافيك فقط".
 - **Format** — 1080×1920 @ 30 fps unless the user wants otherwise. 30 fps renders twice as fast as 60 and is what Reels/TikTok deliver anyway.
 - **Language** — detect from audio. Arabic/Hebrew/Persian/Urdu → read `references/rtl-and-fonts.md` before any typography.
-- **Style** — `references/style-editorial-paper.md`, or `brand.md`, or a described style turned into concrete rules.
+- **Style** — `references/style-editorial-paper.md`, or `brand.md`, or a described style turned into concrete rules. If the user sends a **reference reel** ("make it like this one"), read `references/style-from-reference.md`: download it, measure it, distill a `STYLE.md` rule table, and rebuild the look with your own material — never its assets.
 
 Scaffold a child project and write `BRIEF.md` there (HyperFrames' router reads it, and it stops later sessions from re-asking):
 
