@@ -11,6 +11,8 @@ Things learned from real runs that the docs don't put in one place. HyperFrames'
 | Plugin install warns about Git LFS pointer files | Only example media; skills work. `git -C ~/.claude/plugins/marketplaces/hyperframes lfs pull` if you need them. |
 | Transcription comes back in English | The CLI default `small.en` translates. Always pass `--model <multilingual> --language <code>`. |
 | Whisper `initial_prompt` output repeats the prompt instead of the speech | Prompt-echo hallucination on short or unclear clips. Retry without a prompt and with different `beam_size`/`temperature`; prefer comparing several decodes over priming. |
+| `ModuleNotFoundError: faster_whisper` in a new session | The session's `python3` isn't the env you installed into (conda not on PATH). `preflight.sh` prints the interpreter that has it — call that one by full path. |
+| A forced `--cut` at the head removes a word's caption | Whisper glued the first word to camera-handling noise. `plan_cuts.py` now moves the text onto the surviving speech burst of the same word. |
 | Whisper word spans are seconds long | Words absorb neighbouring pauses (and sometimes a missed word). Pass `--silences` (ffmpeg `silencedetect` output) to `plan_cuts.py`; it splits such spans into speech bursts so pauses get cut and no speech is lost. |
 
 ## Source footage

@@ -12,6 +12,7 @@ The overarching idea: energy comes from **meaningful changes** — a cut on a cl
 - Never cut inside a syllable or truncate a hand gesture that completes the sentence.
 - Retakes and false starts: keep the cleanest take; remove the rest even if there's no silence between them.
 - Hard cuts between kept ranges. Dissolves on jump cuts look like a mistake.
+- Camera still settling under the first word (the speaker started talking while sitting back from the phone): don't cut the word — hold the first clean frame as a still over the audio for those few hundred ms (`<img class="clip">` on a track above the A-roll, inside the camera wrapper so the opening push still applies). Same trick at the tail if the hand reaches for the phone during the last word.
 
 ## Two visual worlds (full mode)
 
@@ -63,7 +64,8 @@ In `quick` mode use only the crop changes and caption emphasis — no interludes
 - 1–4 words on screen at a time, never full subtitle sentences.
 - Position around 64–70% of frame height (over the torso), never over the face, and above the bottom ~15% where platform UI sits.
 - Bold/semibold, tight line height, no background pill by default; good contrast via color or a soft shadow.
-- Highlight at most one important word per group with the main accent; the secondary accent is rarer.
+- Highlight at most one important word per group with the main accent; the secondary accent is rarer. Accent-coloured *text* fails contrast over bright walls — when the footage is light, put the highlighted word on an accent pill with cream text instead (it reads over anything).
+- A caption never overlaps a full-screen scene: if a cue starts inside a scene, start it at the cut back; if it runs into one, end it at the cut.
 - Motion: a 2–4 frame fade/rise or a clean hard swap. No bouncing karaoke, per-letter wobble or overshoot on every word.
 - During graphic interludes, no extra subtitle layer — the scene's typography *is* the caption, revealed on the spoken moment. Keep every factual claim, invent none.
 

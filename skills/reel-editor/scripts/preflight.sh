@@ -18,7 +18,12 @@ done
 
 command -v python3 >/dev/null && ok "python3 $(python3 -V 2>&1 | cut -d' ' -f2)" || bad "python3" "https://python.org"
 
-if python3 -c 'import faster_whisper' 2>/dev/null; then ok "faster-whisper"
+# the shell's python3 may not be the one with faster-whisper (e.g. conda not on PATH in a new session)
+fw=""
+for py in python3 ~/miniconda3/bin/python3 ~/anaconda3/bin/python3 /opt/homebrew/bin/python3 /usr/local/bin/python3; do
+  "$py" -c 'import faster_whisper' 2>/dev/null && fw=$(command -v "$py" 2>/dev/null || echo "$py") && break
+done
+if [ -n "$fw" ]; then ok "faster-whisper  (use: $fw)"
 else warn "faster-whisper" "pip install faster-whisper (only needed if HyperFrames /media-use transcription is unavailable)"; fi
 
 # HyperFrames skills: plugin install or standalone skills folder

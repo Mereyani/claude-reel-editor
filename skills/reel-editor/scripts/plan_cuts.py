@@ -57,7 +57,7 @@ def trim_to_speech(words, silences, gap):
     """
     long = sorted((a, b) for a, b in silences if b - a > gap)
     out = []
-    for w in words:
+    for g, w in enumerate(words):
         pieces = [(w["start"], w["end"])]
         for s0, s1 in long:
             nxt = []
@@ -72,8 +72,9 @@ def trim_to_speech(words, silences, gap):
             continue
         main = max(pieces, key=lambda p: p[1] - p[0])
         for a, b in pieces:
-            out.append({**w, "start": round(a, 4), "end": round(b, 4)} if (a, b) == main
-                       else {"text": "", "start": round(a, 4), "end": round(b, 4), "untitled": True})
+            out.append({**w, "start": round(a, 4), "end": round(b, 4), "group": g} if (a, b) == main
+                       else {"text": "", "start": round(a, 4), "end": round(b, 4), "untitled": True,
+                             "group": g, "orig_text": w["text"]})
     return sorted(out, key=lambda w: w["start"])
 
 
@@ -123,7 +124,17 @@ def plan(words, gap=0.25, pad=0.08, fps=None, duration=None, cuts=()):
         snap = (lambda t: round(t * fps) / fps) if fps else (lambda t: t)
         ranges = subtract(ranges, [(round(snap(a), 4), round(snap(b), 4)) for a, b in cuts])
         inside = lambda t: any(r["src_start"] <= t < r["src_end"] for r in ranges)
-        words = [w for w in words if inside((w["start"] + w["end"]) / 2)]
+        kept = [w for w in words if inside((w["start"] + w["end"]) / 2)]
+        # a forced cut can remove the burst that carried a word's text (e.g. whisper glued the
+        # word to camera-handling noise) while its real speech survives: move the text there
+        alive = {w.get("group") for w in kept if w["text"]}
+        for w in sorted(kept, key=lambda w: w["start"] - w["end"]):  # longest first
+            g = w.get("group")
+            if w.get("untitled") and g is not None and g not in alive:
+                w["text"] = w.pop("orig_text")
+                w.pop("untitled")
+                alive.add(g)
+        words = kept
 
     out = 0.0
     for r in ranges:
@@ -264,6 +275,10 @@ def selftest():
     mc = plan(words, gap=0.25, pad=0.08, duration=5.0, cuts=[(1.45, 1.95)])
     assert [w["text"] for w in mc["words"]] == ["a", "c", "d"], mc["words"]
     assert all(not (r["src_start"] < 1.9 and r["src_end"] > 1.5) for r in mc["ranges"]), mc["ranges"]
+    # cut removes the burst holding the text; the surviving speech burst inherits it
+    tw2 = trim_to_speech([{"text": "hi", "start": 0.0, "end": 2.4}], [(0.54, 0.77), (0.8, 2.03)], 0.2)
+    mh = plan(tw2, gap=0.25, pad=0.08, duration=3.0, cuts=[(0, 2.0)])
+    assert [w["text"] for w in mh["words"]] == ["hi"], mh["words"]
     assert "concat=n=2" in bake_filter(m["ranges"]) and "atrim=start=2.92:end=3.73" in bake_filter(m["ranges"])
     print("plan_cuts selftest: OK")
 
