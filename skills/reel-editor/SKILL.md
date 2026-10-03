@@ -29,7 +29,7 @@ Work through the steps in order. Each produces an inspectable artifact in the pr
 
 Defaults, confirmed in **one** message only if genuinely ambiguous:
 
-- **Mode** — `full` (default): cuts + captions + reframes + graphic interludes. `quick`: cuts + captions + reframes only; several times cheaper, good for daily posting.
+- **Mode** — `full` (default): cuts + captions + reframes + graphic interludes. `quick`: cuts + captions + reframes only; several times cheaper, good for daily posting. `faceless`: the speaker never appears — their voice plays over continuous motion graphics (see `editing-rules.md` → *Faceless mode*). Users ask for it as "without my face", "بدون وجهي", "voice only", "صوت وجرافيك فقط".
 - **Format** — 1080×1920 @ 30 fps unless the user wants otherwise. 30 fps renders twice as fast as 60 and is what Reels/TikTok deliver anyway.
 - **Language** — detect from audio. Arabic/Hebrew/Persian/Urdu → read `references/rtl-and-fonts.md` before any typography.
 - **Style** — `references/style-editorial-paper.md`, or `brand.md`, or a described style turned into concrete rules.
@@ -70,6 +70,8 @@ Pick one, and record which in `BRIEF.md`:
 
 - **Baked A-roll** (default for phone/VFR sources, or more than ~10 cuts): `plan_cuts.py … --bake raw.mp4 edit/assets/aroll.mp4` renders the kept ranges into one constant-frame-rate H.264 file with 10 ms audio fades at every cut and a keyframe every second. The composition then has a single `<video>` from 0 to `output_duration`, which seeks exactly, renders fastest, and can't drift.
 - **Clip-per-range** (CFR sources, few cuts, user wants to re-trim cuts in Studio): one `<video>` per kept range — `data-media-start`=`src_start`, `data-duration`=`duration`, `data-start`=`out_start`, `data-has-audio="true"`, unique `id` on each (`/hyperframes-core` → `creator-editing-recipes.md`).
+
+In `faceless` mode the A-roll is used only for its audio: extract it (`ffmpeg -i aroll.mp4 -vn -c:a copy voice.m4a`) and place it as an `<audio id="voice">` track; no `<video>` at all, so the face can never leak into a frame.
 
 ## Step 5 — Storyboard
 

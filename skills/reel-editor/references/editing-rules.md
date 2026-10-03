@@ -83,6 +83,14 @@ In `quick` mode use only the crop changes and caption emphasis — no interludes
 - No music unless the user supplies or approves it — voice-only beats unlicensed music.
 - SFX only for meaningful moments (graphic cut, list item lands, CTA), well under the voice.
 
+## Faceless mode (voice + graphics only)
+
+- The picture never goes empty: scenes run back-to-back from 0 to the end, each covering one semantic beat (~3–7 s; a list or comparison may run longer). Hard cuts between them.
+- Every scene builds on the spoken words (a keyword lands when it's said) and keeps a restrained drift (scale 1 → 1.03 over the scene) so nothing sits frozen while the voice runs.
+- Visualise the *meaning*, not the topic: "most developers" → a grid of people where most light up; "consumes more tokens" → a meter filling and coins stacking; "execution became easy" → a check mark. Callbacks (the same window or bulb reappearing later) make the piece feel designed.
+- Keep a bottom caption rail on for the whole piece (sound-off viewers): ink text on the paper background, one highlighted word, sitting above the platform UI (≈ y 1530–1630). Scene content stays above ≈ y 1480 so the two never collide. The final CTA card replaces the rail.
+- Never invent facts to fill the screen; abstract shapes (empty outline chips for "many other fields") are honest, made-up labels are not.
+
 ## Safe zones (9:16, 1080×1920)
 
 Essential text within roughly x 80–1000 and y 140–1650; CTA comfortably above the bottom controls.

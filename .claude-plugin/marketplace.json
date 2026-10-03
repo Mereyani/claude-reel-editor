@@ -6,7 +6,7 @@
   "plugins": [
     {
       "name": "reel-editor",
-      "version": "0.2.1",
+      "version": "0.3.0",
       "source": "./",
       "description": "Edit raw talking-head footage into a publish-ready reel: silence cuts, word-timed captions, reframes, motion-graphic interludes. Strong Arabic/RTL support.",
       "homepage": "https://github.com/Mereyani/claude-reel-editor",

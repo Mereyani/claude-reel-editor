@@ -16,6 +16,8 @@ Broken Arabic is the fastest way to make an edit look amateur: disconnected lett
 - Put `dir="rtl"` and `lang="ar"` (or the right code) on every RTL text container.
 - Animate whole words or whole lines. Splitting Arabic into per-letter spans breaks the joining forms — the letters stop connecting.
 - Mixed text (an English product name inside an Arabic sentence) should stay in the logical order the speaker said it; wrap Latin runs in `<bdi>` or a span with `dir="ltr"` if punctuation jumps to the wrong side.
+- **Consecutive Latin words are one run.** If captions build one `<span>` per word, merge adjacent Latin tokens (and a number that follows them) into a single `dir="ltr"` span — "Claude Code", "Opus 5.5". Separate spans get ordered right-to-left by the Arabic line and read "Code Claude".
+- A space between two large inline words inherits the *container's* font size; if the container is small (or unset), the words visually touch. Use `display: flex; gap: …` (or set the container's font size) instead of relying on a typed space.
 - Let lines break naturally between words; never in the middle of a word.
 - Don't use `letter-spacing` on Arabic.
 - Verify in the real preview at 100% that letters connect and words read in the right order before approving.
