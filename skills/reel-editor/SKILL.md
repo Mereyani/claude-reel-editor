@@ -68,7 +68,7 @@ Before running it, remove from the word list: head/tail camera-handling, retakes
 
 Pick one, and record which in `BRIEF.md`:
 
-- **Baked A-roll** (default for phone/VFR sources, or more than ~10 cuts): `plan_cuts.py … --bake raw.mp4 edit/assets/aroll.mp4` renders the kept ranges into one constant-frame-rate H.264 file with 10 ms audio fades at every cut and a keyframe every second. The composition then has a single `<video>` from 0 to `output_duration`, which seeks exactly, renders fastest, and can't drift.
+- **Baked A-roll** (default for phone/VFR sources, or more than ~10 cuts): `plan_cuts.py … --bake raw.mp4 edit/assets/aroll.mp4 --clean` renders the kept ranges into one constant-frame-rate H.264 file with 10 ms audio fades at every cut and a keyframe every second; `--clean` adds conservative voice cleanup (rumble cut, ~12 dB denoise against the file's measured noise floor, mud cut, presence lift, gentle compression) before loudness normalisation. Use it whenever the recording has room noise or hiss — phone recordings almost always do. The composition then has a single `<video>` from 0 to `output_duration`, which seeks exactly, renders fastest, and can't drift.
 - **Clip-per-range** (CFR sources, few cuts, user wants to re-trim cuts in Studio): one `<video>` per kept range — `data-media-start`=`src_start`, `data-duration`=`duration`, `data-start`=`out_start`, `data-has-audio="true"`, unique `id` on each (`/hyperframes-core` → `creator-editing-recipes.md`).
 
 In `faceless` mode the A-roll is used only for its audio: extract it (`ffmpeg -i aroll.mp4 -vn -c:a copy voice.m4a`) and place it as an `<audio id="voice">` track; no `<video>` at all, so the face can never leak into a frame.
@@ -89,6 +89,10 @@ Follow `/hyperframes-core`. The details that most often break (see `references/h
 - Fonts: a local `@font-face` file for anything non-bundled (`references/rtl-and-fonts.md`).
 - External visuals the speaker asks for (their website, their logo): capture or copy them once into `assets/` before building; never fetch at render time. A website screenshot: `chrome-headless-shell --headless --screenshot=site.png --window-size=540,2400 --force-device-scale-factor=2 --hide-scrollbars <url>` (the binary lives under `~/.cache/hyperframes/chrome/`).
 - Search `npx hyperframes catalog --query "<look>" --json` before hand-building a named effect or transition.
+
+### Sound design
+
+Picture events without sound feel unfinished. Add SFX from `/media-use`'s bundled library (21 offline files in `media-use/audio/assets/sfx/`; HeyGen credentials unlock more): `whoosh` on whips and slides, `impact-bass-1` on hard cuts between worlds and on stamps/slams, `pop` on bubbles/chips appearing, `click`/`click-soft` on small landings, `sparkle` on glows, `chime` on a success/check. Read `editing-rules.md` → *Audio* for levels — the bundled files differ by >20 LU, so one global volume is wrong.
 
 ## Step 7 — Verify, then stop for approval
 

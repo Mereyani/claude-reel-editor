@@ -14,6 +14,9 @@ Optional:
   --srt captions.srt          short caption cues (1-4 words) on the output timeline
   --bake src.mp4 aroll.mp4    render the cuts into one constant-frame-rate A-roll with ffmpeg
                               (use for phone/WhatsApp VFR footage or many cuts; needs --fps)
+  --clean                     with --bake: conservative voice cleanup before loudness
+                              (rumble cut, denoise profiled from the longest pause, mud cut,
+                              presence lift, gentle compression)
 
 Usage:
   plan_cuts.py transcript.json -o timing-map.json [--gap 0.25] [--pad 0.08] [--fps 30] [--duration SRC_SECONDS]
@@ -218,10 +221,31 @@ def bake_filter(ranges, fps=30, fade=0.01):
     return ";".join(parts)
 
 
-def bake(m, src, out, fps, lufs=-14.0):
+def noise_floor(src):
+    """Room/hiss level to denoise against: astats' overall "Noise floor dB" (the quietest
+    windowed RMS in the whole file). Detected "pauses" are a poor proxy - they often hold
+    breaths or camera handling."""
+    r = subprocess.run(["ffmpeg", "-hide_banner", "-i", src, "-vn", "-af", "astats=metadata=0", "-f", "null", "-"],
+                       capture_output=True, text=True)
+    vals = re.findall(r"Noise floor dB:\s*(-?[0-9.]+)", r.stderr)
+    v = float(vals[-1]) if vals else -50.0  # last match = "Overall"
+    return max(-70.0, min(-25.0, v))
+
+
+def clean_chain(nf):
+    """Conservative speech cleanup. Denoise by ~12 dB against the measured floor; no gating, so
+    breaths and word tails survive (aggressive settings sound robotic)."""
+    return (f"highpass=f=80,afftdn=nr=12:nf={nf:.0f}:tn=1,"
+            "equalizer=f=300:t=q:w=1.0:g=-2,equalizer=f=3500:t=q:w=1.2:g=2,"
+            "acompressor=threshold=-22dB:ratio=2.5:attack=10:release=160:makeup=1")
+
+
+def bake(m, src, out, fps, lufs=-14.0, clean=None):
     graph = bake_filter(m["ranges"], fps)
+    if clean is not None:
+        graph = graph.replace("[0:a]asplit", f"[0:a]{clean_chain(clean)},asplit", 1)
     if lufs is not None:  # phone voice is usually far too quiet for social (-14 LUFS, -1 dBTP)
-        graph = graph.replace("[v][a]", f"[v][a0];[a0]loudnorm=I={lufs}:TP=-1:LRA=11[a]")
+        graph = graph.replace("[v][a]", f"[v][a0];[a0]loudnorm=I={lufs}:TP=-1.5:LRA=11[a]")
     cmd = ["ffmpeg", "-v", "error", "-y", "-i", src, "-filter_complex", graph,
            "-map", "[v]", "-map", "[a]", "-r", f"{fps:.6g}", "-fps_mode", "cfr",
            "-c:v", "libx264", "-crf", "16", "-preset", "medium", "-pix_fmt", "yuv420p",
@@ -279,6 +303,7 @@ def selftest():
     tw2 = trim_to_speech([{"text": "hi", "start": 0.0, "end": 2.4}], [(0.54, 0.77), (0.8, 2.03)], 0.2)
     mh = plan(tw2, gap=0.25, pad=0.08, duration=3.0, cuts=[(0, 2.0)])
     assert [w["text"] for w in mh["words"]] == ["hi"], mh["words"]
+    assert clean_chain(-48).startswith("highpass") and "nf=-48" in clean_chain(-48)
     assert "concat=n=2" in bake_filter(m["ranges"]) and "atrim=start=2.92:end=3.73" in bake_filter(m["ranges"])
     print("plan_cuts selftest: OK")
 
@@ -300,6 +325,7 @@ def main():
     ap.add_argument("--silences", help="ffmpeg silencedetect output to tighten word boundaries")
     ap.add_argument("--srt", help="also write caption cues (output timeline) to this .srt")
     ap.add_argument("--bake", nargs=2, metavar=("SRC", "OUT"), help="render the cut A-roll with ffmpeg")
+    ap.add_argument("--clean", action="store_true", help="with --bake: denoise/EQ/compress the voice")
     ap.add_argument("--lufs", type=float, default=-14.0, help="loudness target for --bake (use 'nan' to skip)")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
@@ -322,7 +348,10 @@ def main():
     if a.bake:
         if not a.fps:
             ap.error("--bake needs --fps (the constant output frame rate)")
-        bake(m, *a.bake, a.fps, None if math.isnan(a.lufs) else a.lufs)
+        nf = noise_floor(a.bake[0]) if a.clean else None
+        if nf is not None:
+            print(f"voice cleanup: noise floor {nf:.1f} dBFS")
+        bake(m, *a.bake, a.fps, None if math.isnan(a.lufs) else a.lufs, nf)
         print(f"A-roll ({a.fps:.6g} fps CFR, cuts baked) -> {a.bake[1]}")
 
 

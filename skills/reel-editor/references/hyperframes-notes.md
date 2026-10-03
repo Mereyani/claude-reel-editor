@@ -15,6 +15,12 @@ Things learned from real runs that the docs don't put in one place. HyperFrames'
 | A forced `--cut` at the head removes a word's caption | Whisper glued the first word to camera-handling noise. `plan_cuts.py` now moves the text onto the surviving speech burst of the same word. |
 | Whisper word spans are seconds long | Words absorb neighbouring pauses (and sometimes a missed word). Pass `--silences` (ffmpeg `silencedetect` output) to `plan_cuts.py`; it splits such spans into speech bursts so pauses get cut and no speech is lost. |
 
+## Measuring audio from the shell
+
+- `ffmpeg -ss X -t D -i file -af astats` can print nothing for short windows; use `-af "atrim=X:Y,astats=metadata=0"` instead.
+- In zsh, `set -- $w` does not split a string into words; use `a=(${=w})`.
+- astats prints per-channel blocks then `Overall`; take values after the `Overall` line. "Noise floor dB" (overall, whole file) is the right denoise reference — detected "pauses" often hold breaths or camera handling.
+
 ## Source footage
 
 - Phone / WhatsApp video is usually variable frame rate (`r_frame_rate` ≠ `avg_frame_rate`) and WhatsApp re-encodes to ~480p. Bake a CFR A-roll (`plan_cuts.py --bake`), which resamples *before* trimming so every cut lands on an exact frame and audio stays in sync to the millisecond.

@@ -82,6 +82,10 @@ In `quick` mode use only the crop changes and caption emphasis — no interludes
 - Loudness about −14 LUFS integrated, true peak ≤ −1 dBTP.
 - No music unless the user supplies or approves it — voice-only beats unlicensed music.
 - SFX only for meaningful moments (graphic cut, list item lands, CTA), well under the voice.
+- Set each effect's `data-volume` from its **measured** loudness, not a flat 0.35. Bundled library, measured: `impact-bass-1` −6.5 LUFS, `sparkle` −11, `whoosh`/`whoosh-short` −15, `pop` −21, `chime` −28 (clicks are too short for LUFS; peak −5 dBFS). Gains that sat well under a −14 LUFS voice: impact 0.09, sparkle 0.18, whoosh 0.42, whoosh-short 0.3, pop 0.6, chime 1.0, click 0.35, click-soft 0.6 — i.e. impacts ~8 dB under the voice RMS, whooshes ~10, pops/chimes ~13, rapid clicks ~20.
+- Sync to the visual hit, not the tween start: a stamp that slams in over 0.25 s gets its impact at the landing.
+- Rapid repeats (coins, snips) overlap on one Studio track → `duplicate_audio_track` lint. Assign tracks greedily so no two effects on one track overlap.
+- Verify the mix by rendering a copy with the voice at `data-volume="0"` and measuring the SFX alone (`atrim=a:b,astats`) against the voice; subtracting the voice from the final mix doesn't work (the render shifts samples).
 
 ## Faceless mode (voice + graphics only)
 
