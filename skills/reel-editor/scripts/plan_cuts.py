@@ -6,14 +6,25 @@ Output timing-map.json:
   ranges   - kept source ranges and where they land on the output timeline
   removed  - cut source ranges (dead air)
   words    - every word re-timed onto the output timeline (feed captions from this)
+Optional:
+  --silences silences.txt     ffmpeg silencedetect output; trims word boundaries that swallowed
+                              pauses (whisper often stretches a word across the silence after it)
+  --cut 22.7-22.98,55-60      source ranges to remove no matter what (retakes, stutters, spoken
+                              "cut this" cues); padding never leaks back into them
+  --srt captions.srt          short caption cues (1-4 words) on the output timeline
+  --bake src.mp4 aroll.mp4    render the cuts into one constant-frame-rate A-roll with ffmpeg
+                              (use for phone/WhatsApp VFR footage or many cuts; needs --fps)
 
 Usage:
   plan_cuts.py transcript.json -o timing-map.json [--gap 0.25] [--pad 0.08] [--fps 30] [--duration SRC_SECONDS]
+               [--srt captions.srt] [--bake raw.mp4 aroll.mp4]
   plan_cuts.py --selftest
 """
 import argparse
 import json
 import math
+import re
+import subprocess
 import sys
 from fractions import Fraction
 
@@ -28,7 +39,59 @@ def load_words(path):
     return sorted(words, key=lambda w: w["start"])
 
 
-def plan(words, gap=0.25, pad=0.08, fps=None, duration=None):
+def load_silences(path):
+    """Parse `silence_start: x` / `silence_end: y` pairs from ffmpeg silencedetect output."""
+    text = open(path, encoding="utf-8").read()
+    starts = [float(x) for x in re.findall(r"silence_start:\s*([\d.]+)", text)]
+    ends = [float(x) for x in re.findall(r"silence_end:\s*([\d.]+)", text)]
+    return list(zip(starts, ends))
+
+
+def trim_to_speech(words, silences, gap):
+    """Remove pauses > gap that a word's span swallowed, without ever dropping sound.
+
+    Whisper stretches words across silences (and sometimes merges a missed word into a
+    neighbour), so a "word" can hold several bursts of speech. Split it into those bursts:
+    the longest burst carries the text; the others stay as untitled speech so the cut
+    planner keeps their audio but captions ignore them.
+    """
+    long = sorted((a, b) for a, b in silences if b - a > gap)
+    out = []
+    for w in words:
+        pieces = [(w["start"], w["end"])]
+        for s0, s1 in long:
+            nxt = []
+            for a, b in pieces:
+                if s1 <= a or s0 >= b:
+                    nxt.append((a, b))
+                    continue
+                nxt += [p for p in ((a, min(b, s0)), (max(a, s1), b)) if p[1] - p[0] > 0.04]
+            pieces = nxt
+        if not pieces:  # all silence by the detector's account: trust whisper
+            out.append(w)
+            continue
+        main = max(pieces, key=lambda p: p[1] - p[0])
+        for a, b in pieces:
+            out.append({**w, "start": round(a, 4), "end": round(b, 4)} if (a, b) == main
+                       else {"text": "", "start": round(a, 4), "end": round(b, 4), "untitled": True})
+    return sorted(out, key=lambda w: w["start"])
+
+
+def subtract(ranges, cuts):
+    """Remove forced-cut intervals from kept ranges."""
+    for c0, c1 in sorted(cuts):
+        nxt = []
+        for r in ranges:
+            a, b = r["src_start"], r["src_end"]
+            if c1 <= a or c0 >= b:
+                nxt.append(r)
+                continue
+            nxt += [{"src_start": x, "src_end": y} for x, y in ((a, c0), (c1, b)) if y - x > 0.02]
+        ranges = nxt
+    return ranges
+
+
+def plan(words, gap=0.25, pad=0.08, fps=None, duration=None, cuts=()):
     """Keep speech, cut pauses longer than `gap`, leave `pad` of room around speech."""
     if duration is not None:  # whisper sometimes hallucinates words past the end of the media
         words = [w for w in words if w["start"] < duration]
@@ -56,6 +119,12 @@ def plan(words, gap=0.25, pad=0.08, fps=None, duration=None):
         if round(end, 4) > round(start, 4):  # --duration can swallow a run entirely
             ranges.append({"src_start": round(start, 4), "src_end": round(end, 4)})
 
+    if cuts:
+        snap = (lambda t: round(t * fps) / fps) if fps else (lambda t: t)
+        ranges = subtract(ranges, [(round(snap(a), 4), round(snap(b), 4)) for a, b in cuts])
+        inside = lambda t: any(r["src_start"] <= t < r["src_end"] for r in ranges)
+        words = [w for w in words if inside((w["start"] + w["end"]) / 2)]
+
     out = 0.0
     for r in ranges:
         r["duration"] = round(r["src_end"] - r["src_start"], 4)
@@ -78,7 +147,8 @@ def plan(words, gap=0.25, pad=0.08, fps=None, duration=None):
         while k + 1 < len(ranges) and w["start"] >= ranges[k]["src_end"]:
             k += 1
         j = k  # frame snapping can push a word's end into the next (contiguous) range
-        while j + 1 < len(ranges) and w["end"] > ranges[j]["src_end"]:
+        while (j + 1 < len(ranges) and w["end"] > ranges[j]["src_end"]
+               and ranges[j + 1]["src_start"] <= ranges[j]["src_end"] + 1e-6):
             j += 1
         r, r2 = ranges[k], ranges[j]
         timed.append({**w,
@@ -86,13 +156,67 @@ def plan(words, gap=0.25, pad=0.08, fps=None, duration=None):
                       "out_end": round(min(w["end"], r2["src_end"]) + r2["out_start"] - r2["src_start"], 4)})
 
     return {
-        "params": {"gap": gap, "pad": pad, "fps": fps},
+        "params": {"gap": gap, "pad": pad, "fps": fps, "cuts": [list(c) for c in cuts]},
         "source_duration": duration,
         "output_duration": round(out, 4),
         "ranges": ranges,
         "removed": removed,
         "words": timed,
     }
+
+
+def srt_cues(words, max_words=4, max_gap=0.4):
+    """Group re-timed words into short cues; break on punctuation, pauses and max_words."""
+    cues, cur = [], []
+    for w in (w for w in words if w["text"].strip()):
+        if cur and (len(cur) >= max_words or w["out_start"] - cur[-1]["out_end"] > max_gap):
+            cues.append(cur)
+            cur = []
+        cur.append(w)
+        if w["text"].rstrip().endswith((".", "!", "?", "؟", "،", ",", "؛")):
+            cues.append(cur)
+            cur = []
+    if cur:
+        cues.append(cur)
+    return [(c[0]["out_start"], c[-1]["out_end"], " ".join(w["text"].strip() for w in c)) for c in cues]
+
+
+def write_srt(cues, path):
+    def ts(t):
+        ms = int(round(t * 1000))
+        return f"{ms // 3600000:02}:{ms // 60000 % 60:02}:{ms // 1000 % 60:02},{ms % 1000:03}"
+    with open(path, "w", encoding="utf-8") as f:
+        for i, (a, b, text) in enumerate(cues, 1):
+            f.write(f"{i}\n{ts(a)} --> {ts(b)}\n{text}\n\n")
+
+
+def bake_filter(ranges, fps=30, fade=0.01):
+    """ffmpeg filtergraph: resample to CFR first (VFR phone footage would otherwise gain or lose
+    a frame per cut and drift out of sync), trim every kept range, 10 ms audio fades, concat."""
+    n = len(ranges)
+    parts = [f"[0:v]fps={fps:.6g},split={n}" + "".join(f"[sv{i}]" for i in range(n)),
+             f"[0:a]asplit={n}" + "".join(f"[sa{i}]" for i in range(n))]
+    labels = []
+    for i, r in enumerate(ranges):
+        a, b, d = r["src_start"], r["src_end"], r["duration"]
+        parts.append(f"[sv{i}]trim=start={a}:end={b},setpts=PTS-STARTPTS[v{i}]")
+        parts.append(f"[sa{i}]atrim=start={a}:end={b},asetpts=PTS-STARTPTS,"
+                     f"afade=t=in:d={fade},afade=t=out:st={max(d - fade, 0):.4f}:d={fade}[a{i}]")
+        labels.append(f"[v{i}][a{i}]")
+    parts.append(f"{''.join(labels)}concat=n={len(ranges)}:v=1:a=1[v][a]")
+    return ";".join(parts)
+
+
+def bake(m, src, out, fps, lufs=-14.0):
+    graph = bake_filter(m["ranges"], fps)
+    if lufs is not None:  # phone voice is usually far too quiet for social (-14 LUFS, -1 dBTP)
+        graph = graph.replace("[v][a]", f"[v][a0];[a0]loudnorm=I={lufs}:TP=-1:LRA=11[a]")
+    cmd = ["ffmpeg", "-v", "error", "-y", "-i", src, "-filter_complex", graph,
+           "-map", "[v]", "-map", "[a]", "-r", f"{fps:.6g}", "-fps_mode", "cfr",
+           "-c:v", "libx264", "-crf", "16", "-preset", "medium", "-pix_fmt", "yuv420p",
+           "-g", str(max(1, round(fps))),  # keyframe every second: fast, exact seeking in preview
+           "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-movflags", "+faststart", out]
+    subprocess.run(cmd, check=True)
 
 
 def selftest():
@@ -129,6 +253,18 @@ def selftest():
     for w in m5["words"]:
         assert w["out_end"] - w["out_start"] > 0.4, w
     assert fps_arg("30000/1001") == 30000 / 1001
+    # captions: 1-4 words, split on pauses and Arabic punctuation
+    cw = [{"text": t, "out_start": i * 0.3, "out_end": i * 0.3 + 0.25} for i, t in enumerate("a b c d e".split())]
+    cw[1]["text"] = "b\u060c"
+    assert [c[2] for c in srt_cues(cw)] == ["a b\u060c", "c d e"], srt_cues(cw)
+    # a word stretched across a long pause is trimmed back to its speech
+    tw = trim_to_speech([{"text": "x", "start": 25.26, "end": 28.7}], [(26.99, 27.95), (25.03, 25.25)], 0.25)
+    assert [(t["text"], t["start"], t["end"]) for t in tw] == [("x", 25.26, 26.99), ("", 27.95, 28.7)], tw
+    # forced cut removes a stutter even though padding would have kept part of it
+    mc = plan(words, gap=0.25, pad=0.08, duration=5.0, cuts=[(1.45, 1.95)])
+    assert [w["text"] for w in mc["words"]] == ["a", "c", "d"], mc["words"]
+    assert all(not (r["src_start"] < 1.9 and r["src_end"] > 1.5) for r in mc["ranges"]), mc["ranges"]
+    assert "concat=n=2" in bake_filter(m["ranges"]) and "atrim=start=2.92:end=3.73" in bake_filter(m["ranges"])
     print("plan_cuts selftest: OK")
 
 
@@ -145,17 +281,34 @@ def main():
     ap.add_argument("--pad", type=float, default=0.08, help="room kept around speech (s)")
     ap.add_argument("--fps", type=fps_arg, help="snap cuts to this frame rate (30, 29.97 or 30000/1001)")
     ap.add_argument("--duration", type=float, help="source duration (s), from ffprobe")
+    ap.add_argument("--cut", default="", help="force-remove source ranges: 12.3-14,20-21.5")
+    ap.add_argument("--silences", help="ffmpeg silencedetect output to tighten word boundaries")
+    ap.add_argument("--srt", help="also write caption cues (output timeline) to this .srt")
+    ap.add_argument("--bake", nargs=2, metavar=("SRC", "OUT"), help="render the cut A-roll with ffmpeg")
+    ap.add_argument("--lufs", type=float, default=-14.0, help="loudness target for --bake (use 'nan' to skip)")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
     if not a.transcript:
         ap.error("transcript path required")
-    m = plan(load_words(a.transcript), a.gap, a.pad, a.fps, a.duration)
+    words = load_words(a.transcript)
+    if a.silences:
+        words = trim_to_speech(words, load_silences(a.silences), a.gap)
+    cuts = [tuple(map(float, c.split("-"))) for c in a.cut.split(",") if c.strip()]
+    m = plan(words, a.gap, a.pad, a.fps, a.duration, cuts)
     json.dump(m, open(a.out, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
     src = a.duration or m["ranges"][-1]["src_end"]
     print(f"{len(m['ranges'])} ranges kept, {len(m['removed'])} cut, "
           f"{src:.2f}s -> {m['output_duration']:.2f}s  ->  {a.out}")
+    if a.srt:
+        write_srt(srt_cues(m["words"]), a.srt)
+        print(f"captions -> {a.srt}")
+    if a.bake:
+        if not a.fps:
+            ap.error("--bake needs --fps (the constant output frame rate)")
+        bake(m, *a.bake, a.fps, None if math.isnan(a.lufs) else a.lufs)
+        print(f"A-roll ({a.fps:.6g} fps CFR, cuts baked) -> {a.bake[1]}")
 
 
 if __name__ == "__main__":

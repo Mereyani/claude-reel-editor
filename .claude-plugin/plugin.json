@@ -1,6 +1,6 @@
 {
   "name": "reel-editor",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Edit raw talking-head footage into a publish-ready reel (silence cuts, captions, reframes, motion-graphic interludes) with Claude Code + HyperFrames. Strong Arabic/RTL support.",
   "author": { "name": "Mereyani", "url": "https://github.com/Mereyani" },
   "homepage": "https://github.com/Mereyani/claude-reel-editor",

@@ -30,6 +30,13 @@ claude plugin install reel-editor@claude-reel-editor
 
 أو بدون نظام الإضافات: `npx skills add Mereyani/claude-reel-editor`
 
+### الجديد في 0.2.0
+
+- **أوامر المونتاج بالصوت:** قل أثناء التصوير «اقطع هذه اللقطة» أو «أريد زوم على وجهي» أو «اعرض موقعي هنا» وسينفّذها.
+- **قص أدق:** يجمع بين توقيت الكلمات وكشف الصمت الحقيقي، فلا يُقص كلام ولا يبقى صمت.
+- **فيديوهات الجوال وواتساب:** يحوّلها لمعدل إطارات ثابت ويضبط مستوى الصوت (−14 LUFS) قبل المونتاج.
+- **مُجرَّبة فعليًا:** فيديو عربي 72 ثانية → ريل 49 ثانية مع مشاهد جرافيك وتقسيم شاشة وزوم، تصدير في أقل من دقيقتين.
+
 ### الاستخدام
 
 1. أنشئ مجلدًا جديدًا وضع فيه الفيديو الخام (واختياريًا: `fonts/` ، `logos/` ، `brand.md`).
@@ -85,10 +92,13 @@ skills/reel-editor/
 ├── references/
 │   ├── editing-rules.md              # cuts, crop states, beat types, captions, motion, audio, safe zones
 │   ├── style-editorial-paper.md      # default visual preset (copy it to make your own)
-│   └── rtl-and-fonts.md              # Arabic/RTL shaping, font discovery, dialect transcripts
+│   ├── rtl-and-fonts.md              # Arabic/RTL shaping, font discovery, dialect transcripts
+│   ├── spoken-cues.md                # "cut this", "zoom on my face", "show my site here" said while recording
+│   └── hyperframes-notes.md          # setup fixes, lint codes that matter, fonts, commands
 └── scripts/
-    ├── preflight.sh                  # checks node 22+, ffmpeg, python, faster-whisper, HyperFrames skills
-    └── plan_cuts.py                  # word timestamps → frame-accurate cut list + captions re-timed to the output
+    ├── preflight.sh                  # checks node 22+, ffmpeg, python, faster-whisper, HyperFrames, Chrome
+    └── plan_cuts.py                  # word timestamps (+ ffmpeg silences) → frame-accurate cuts, captions.srt,
+                                      # and a baked CFR, loudness-normalised A-roll (--bake)
 ```
 
 `plan_cuts.py` is stdlib-only; run `python3 skills/reel-editor/scripts/plan_cuts.py --selftest`.

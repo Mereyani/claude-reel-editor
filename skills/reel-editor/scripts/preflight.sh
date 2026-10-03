@@ -13,7 +13,7 @@ if command -v node >/dev/null; then
 else bad "node" "https://nodejs.org (22+)"; fi
 
 for t in ffmpeg ffprobe; do
-  command -v $t >/dev/null && ok "$t" || bad "$t" "macOS: brew install ffmpeg | Windows: winget install ffmpeg | Linux: apt install ffmpeg"
+  command -v $t >/dev/null && ok "$t" || bad "$t" "macOS: brew install ffmpeg (no sudo? conda create -n ffmpeg -c conda-forge ffmpeg) | Windows: winget install ffmpeg | Linux: apt install ffmpeg"
 done
 
 command -v python3 >/dev/null && ok "python3 $(python3 -V 2>&1 | cut -d' ' -f2)" || bad "python3" "https://python.org"
@@ -32,6 +32,10 @@ if [ $found -eq 1 ]; then
 else
   bad "HyperFrames skills" "claude plugin marketplace add heygen-com/hyperframes && claude plugin install hyperframes@hyperframes   (or: npx hyperframes skills update)"
 fi
+
+# headless Chrome HyperFrames renders with (first launch can be slow; not fatal)
+chrome=$(ls -d ~/.cache/hyperframes/chrome/chrome-headless-shell/*/*/chrome-headless-shell 2>/dev/null | tail -1)
+[ -n "$chrome" ] && ok "headless Chrome" || warn "headless Chrome" "npx hyperframes browser ensure"
 
 [ $miss -eq 0 ] && echo "ready." || echo "fix the MISSING items, then re-run."
 exit $miss

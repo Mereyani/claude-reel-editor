@@ -6,7 +6,7 @@ Broken Arabic is the fastest way to make an edit look amateur: disconnected lett
 
 1. If the user supplied `fonts/`, use those files via `@font-face` with local `url()`s.
 2. Otherwise discover installed fonts — don't assume. macOS/Linux: `fc-list :lang=ar family` / `fc-match Cairo` (or `system_profiler SPFontsDataType` on macOS). Don't trust `document.fonts.check()` for this: it returns `true` for any family with no `@font-face` rule, even one that doesn't exist. For `@font-face` fonts, `(await document.fonts.load('700 64px "Cairo"')).length > 0` is the real check; for system fonts, rely on the OS listing and the visual check below.
-3. Preference order for Arabic display/captions, using the first one genuinely available: Cairo, Tajawal, Noto Kufi Arabic, Noto Sans Arabic, IBM Plex Sans Arabic, then system fallbacks (Geeza Pro / SF Arabic on macOS, Segoe UI on Windows).
+3. Preference order for Arabic display/captions, using the first one genuinely available: Cairo, Tajawal, Noto Kufi Arabic, Noto Sans Arabic, IBM Plex Sans Arabic, then system fonts — on macOS `SF Arabic` (`/System/Library/Fonts/SFArabic.ttf`, variable 100–900, an excellent caption face), on Windows Segoe UI. Copy the file into the project's `assets/` and declare it with `@font-face { font-weight: 100 900 }` (see `hyperframes-notes.md` → *Fonts*).
 4. If none of the good ones exist, a free Arabic font from Google Fonts can be downloaded **once into the project folder** and loaded locally — never fetched at render time. Mention it in the report.
 5. Use real weights: a true Bold/Black for keywords, Bold/SemiBold for captions, Regular/Medium for small text. Faux bold on Arabic looks smeared.
 6. Write the chosen family and weights into the final report.

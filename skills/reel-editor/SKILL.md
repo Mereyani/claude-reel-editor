@@ -1,103 +1,115 @@
 ---
 name: reel-editor
-description: Edit raw talking-head footage into a finished, publish-ready short video (Reels / TikTok / Shorts, or 16:9) — silence removal, jump cuts, punch-in reframes, word-timed captions, full-screen motion-graphic interludes, audio leveling, preview, render — built as code with HyperFrames. Use this whenever the user drops a raw recording and wants it edited, "montaged", cut, captioned, turned into a reel, or "made ready to post", even if they never say HyperFrames. Strong on Arabic/RTL captions (مونتاج، ريلز، شيل الصمت، كابشنز). Not for generating video from nothing with no footage (use the HyperFrames router), and not for editing an existing NLE project (Premiere/Resolve/CapCut files).
+description: Edit raw talking-head footage into a finished, publish-ready short video (Reels / TikTok / Shorts, or 16:9) — silence removal, jump cuts, punch-in reframes, word-timed captions, full-screen motion-graphic interludes, split screens, audio leveling, preview, render — built as code with HyperFrames. Also executes editing directions the speaker says out loud in the recording ("cut this shot", "zoom on my face here", "show my website here"). Use this whenever the user drops a raw recording and wants it edited, "montaged", cut, captioned, turned into a reel, or "made ready to post", even if they never say HyperFrames. Strong on Arabic/RTL captions (مونتاج، ريلز، شيل الصمت، كابشنز، قص، زوم). Not for generating video from nothing with no footage (use the HyperFrames router), and not for editing an existing NLE project (Premiere/Resolve/CapCut files).
 ---
 
 # Reel Editor
 
-Turn one raw recording into a directed short video. The edit is a HyperFrames project (HTML + seekable animation, rendered by ffmpeg), so every caption, cut and graphic stays editable after the first pass — the user can ask for "change the word on frame 140" instead of regenerating the whole video.
+Turn one raw recording into a directed short video. The edit is a HyperFrames project (HTML + seekable animation, rendered by headless Chrome + ffmpeg), so every caption, cut and graphic stays editable — the user can later say "change the word at 0:12" instead of regenerating everything.
 
-This skill is the **director layer**. HyperFrames' own skills know *how* to write valid compositions; this skill decides *what* the edit should be and enforces the quality gates. Lean on their skills for syntax; lean on this one for editorial judgment.
+This skill is the **director layer**. HyperFrames' own skills own the technical contract (valid compositions, lint, render); this skill decides *what* the edit is and enforces the quality gates. When the two disagree on syntax, HyperFrames wins; on editorial taste, this skill wins.
 
-## Step 0 — Preflight
+Work through the steps in order. Each produces an inspectable artifact in the project, so a later session (or the user) can resume from files instead of from memory.
 
-Run `bash <this-skill>/scripts/preflight.sh`. It checks Node 22+, ffmpeg/ffprobe, Python, faster-whisper and the HyperFrames skills, and prints the install command for anything missing. Install what is missing (ask first if it needs sudo or a system package manager). If HyperFrames skills are absent:
+## Step 0 — Environment
 
-```bash
-claude plugin marketplace add heygen-com/hyperframes
-claude plugin install hyperframes@hyperframes
-# or standalone: npx hyperframes skills update
-```
-
-Then read `/hyperframes` (the router). It will point at the domain skills you need: `hyperframes-core`, `hyperframes-animation`, `hyperframes-keyframes`, `hyperframes-creative`, `media-use`, `hyperframes-audio`, `hyperframes-registry`, `hyperframes-cli`. The closest creation workflow is `/talking-head-recut` (graphics over talking head); use `/embedded-captions` patterns for the caption layer and `/general-video` as the fallback.
+1. `bash <this-skill>/scripts/preflight.sh` — Node 22+, ffmpeg/ffprobe, Python, faster-whisper, HyperFrames skills. Install what's missing; read `references/hyperframes-notes.md` → *Setup problems* for machines where the normal install fails (no sudo for Homebrew, Intel Macs, Chrome timeouts).
+2. `npx hyperframes doctor` — ffmpeg, Chrome and disk as HyperFrames sees them.
+3. `npx hyperframes usage --json` — note the usage window; a full-mode reel is expensive. Re-check before rendering.
+4. Read `/hyperframes` (router), then `/general-video` (a footage remix — cuts, reframes, captions, interludes — is a custom edit and routes there), then `/hyperframes-core` before writing any HTML. Load `/hyperframes-keyframes` for zooms/punches, `/hyperframes-animation` for scene motion, `/hyperframes-creative` → `typography.md` for fonts, `/media-use` for icons/images/SFX, `/hyperframes-audio` for loudness, `/hyperframes-registry` before hand-building any named effect, `/hyperframes-cli` for commands. Read them; don't reconstruct them from memory.
 
 ## Step 1 — Intake (one round of questions at most)
 
-Find the inputs in the working folder:
-
-| Input | Required | How to find it |
+| Input | Required | Notes |
 |---|---|---|
-| Raw footage | yes | the video file(s) in the folder; if several and it's unclear which is the A-roll, ask |
-| `fonts/` | no | custom font files to use for captions and titles |
-| `logos/`, `broll/`, `music/` | no | only use what's supplied; never pull random media from the web |
-| `brand.md` | no | colors, fonts, tone; overrides the style preset |
+| Raw footage | yes | any video in the folder; ask only if several and the A-roll is unclear. Never modify the original. |
+| `fonts/` | no | font files for captions/titles |
+| `logos/`, `images/`, `broll/`, `music/` | no | use only what's supplied or what the speaker explicitly names (e.g. "my website") |
+| `brand.md` | no | colors, fonts, tone — overrides the style preset |
 
-Settle the brief with sensible defaults, and confirm it in **one** message only if something is genuinely ambiguous:
+Defaults, confirmed in **one** message only if genuinely ambiguous:
 
-- **Mode** — `full` (default): cuts + captions + reframes + graphic interludes. `quick`: cuts + captions + reframes only — several times faster and cheaper, good for daily posting.
-- **Format** — 1080×1920 (9:16) unless the source or user says otherwise; 1920×1080 for YouTube long-form.
-- **Language** — detect from the audio. Arabic, Hebrew, Persian, Urdu → read `references/rtl-and-fonts.md` before any typography.
-- **Style** — `references/style-editorial-paper.md` (default), or the user's `brand.md`, or a style they describe/link. If they reference a creator's style, describe it as concrete rules (crop scale, caption size/position, palette, cut rhythm) rather than "like X".
+- **Mode** — `full` (default): cuts + captions + reframes + graphic interludes. `quick`: cuts + captions + reframes only; several times cheaper, good for daily posting.
+- **Format** — 1080×1920 @ 30 fps unless the user wants otherwise. 30 fps renders twice as fast as 60 and is what Reels/TikTok deliver anyway.
+- **Language** — detect from audio. Arabic/Hebrew/Persian/Urdu → read `references/rtl-and-fonts.md` before any typography.
+- **Style** — `references/style-editorial-paper.md`, or `brand.md`, or a described style turned into concrete rules.
 
-Work in a new child folder (e.g. `reel-edit/`). Never modify or overwrite the source footage.
+Scaffold a child project and write `BRIEF.md` there (HyperFrames' router reads it, and it stops later sessions from re-asking):
 
-## Step 2 — Understand the footage before designing
+```bash
+npx hyperframes init "<project>/edit" --non-interactive --example=blank --skill=general-video
+```
 
-1. `ffprobe` the source: duration, resolution, fps, codecs, audio rate/channels. Keep the native fps when practical.
-2. Contact sheet at 1 fps (`ffmpeg -i src -vf "fps=1,scale=270:-1,tile=6x5" sheet_%02d.jpg`) and actually look at it: where are the face, eyes and hands, how much headroom, is there usable negative space, does the framing drift.
-3. Silence map: `ffmpeg -i src -af silencedetect=noise=-35dB:d=0.25 -f null - 2>&1 | grep silence_`. Treat it as a hint only.
-4. Word-level transcript → `transcript.json` (`[{"text","start","end"}]`). Prefer HyperFrames `/media-use` transcription; otherwise faster-whisper with `word_timestamps=True` (model `large-v3` for Arabic/dialects, `small` is fine for clean English).
-5. **Correct the transcript by hand.** Whisper mangles product names, English terms inside Arabic speech, and dialect. Fix them now: every caption and every graphic is derived from this file, so an error here is published. If parts stay uncertain, say so — don't animate guesses.
+## Step 2 — Understand the source
 
-Write `source-analysis.md`: metadata, what the speaker is saying in 3–6 beats, framing notes, anything problematic (noise, bad lighting, phone in shot).
+1. `ffprobe` → `source-analysis.md`: duration, resolution, `r_frame_rate` **and** `avg_frame_rate`, codecs, audio rate/channels. If they differ the file is variable-frame-rate (phones, WhatsApp, screen recorders) — plan to bake a CFR A-roll in Step 4. If the resolution is far below 1080 wide (WhatsApp re-encodes to ~480p), say so and suggest the user send the camera original next time; continue with what you have.
+2. Contact sheet with timestamps, then **look at it**:
+   `ffmpeg -i src -vf "fps=1,scale=240:-1,drawtext=text='%{pts\:hms}':x=4:y=4:fontsize=18:fontcolor=yellow:box=1:boxcolor=black@0.6,tile=8x5" sheet_%02d.jpg`
+   Note: camera-setup/teardown frames at head and tail, where the face sits (for crop math), headroom, gestures, and **where the speaker points** when they say "here".
+3. Transcribe with word timestamps → `transcript.json` (`[{"text","start","end"}]`):
+   - faster-whisper `large-v3`, `language=<code>`, `word_timestamps=True`, `condition_on_previous_text=False`; or `npx hyperframes transcribe <src> --model large-v3 --language <code>`.
+   - Never use a `.en` model or the CLI default (`small.en`) for non-English speech — it silently *translates* to English.
+   - Re-run unclear stretches with `clip_timestamps=[a,b]` and an `initial_prompt` containing the names/terms you expect; compare.
+4. **Correct the transcript** (product names, English terms in Arabic speech, dialect). Everything visible is derived from it. Mark what stays uncertain; don't animate guesses.
+5. Find **spoken edit cues** — read `references/spoken-cues.md`. List each cue with its time, its literal words, your interpretation, and how you'll execute it, in `source-analysis.md`.
 
 ## Step 3 — Cut plan
 
 ```bash
-python3 <this-skill>/scripts/plan_cuts.py transcript.json -o timing-map.json --fps <source fps> --duration <source seconds>
+python3 <this-skill>/scripts/plan_cuts.py transcript.json -o timing-map.json \
+  --fps 30 --duration <source seconds> --srt captions.srt
 ```
 
-`--fps` accepts ffprobe's `r_frame_rate` as-is (`30000/1001`). Zero-length words are kept (10 ms) and words past `--duration` are dropped.
+Keeps speech, cuts pauses > `--gap` (0.25 s) leaving `--pad` (0.08 s) of room, snaps to the frame grid, writes `removed` ranges, re-times every word onto the output timeline (`words[].out_start/out_end` — captions use these, never source times), and writes short caption cues. Arithmetic by hand is where edits drift out of sync; use the script.
 
-It keeps speech, cuts pauses longer than `--gap` (default 0.25 s) while leaving `--pad` (0.08 s) of breathing room, snaps cuts to the frame grid, and re-times every word onto the output timeline (`words[].out_start/out_end`) — use those times for captions, never the source times. Doing this arithmetic by hand is where edits drift out of sync, which is why it's a script.
+Before running it, remove from the word list: head/tail camera-handling, retakes and false starts (keep the best take), and any cue that says to cut something (`references/spoken-cues.md`). Then sanity-check cuts against the contact sheet — don't cut through a gesture that completes a sentence.
 
-Then sanity-check against the picture: a cut that lands mid-gesture or mid-breath-laugh should move or go. Retakes (the speaker repeating a sentence) are not silences — find them in the transcript and keep only the best take, then re-run the script on the edited word list. See `references/editing-rules.md` → *Cuts*.
+## Step 4 — A-roll
 
-## Step 4 — Storyboard
+Pick one, and record which in `BRIEF.md`:
 
-Split the narration into semantic beats and assign each a treatment using `references/editing-rules.md` (beat types, A-roll/graphic ratio, crop states, caption rules). Write `STORYBOARD.md`: for each scene, the exact transcript phrase that drives it, output start/end, treatment (talking head + crop state, or graphic interlude + its central visual metaphor), and caption plan.
+- **Baked A-roll** (default for phone/VFR sources, or more than ~10 cuts): `plan_cuts.py … --bake raw.mp4 edit/assets/aroll.mp4` renders the kept ranges into one constant-frame-rate H.264 file with 10 ms audio fades at every cut and a keyframe every second. The composition then has a single `<video>` from 0 to `output_duration`, which seeks exactly, renders fastest, and can't drift.
+- **Clip-per-range** (CFR sources, few cuts, user wants to re-trim cuts in Studio): one `<video>` per kept range — `data-media-start`=`src_start`, `data-duration`=`duration`, `data-start`=`out_start`, `data-has-audio="true"`, unique `id` on each (`/hyperframes-core` → `creator-editing-recipes.md`).
 
-In `quick` mode the storyboard is just crop changes and caption emphasis words.
+## Step 5 — Storyboard
 
-## Step 5 — Build
+Split narration into semantic beats (`references/editing-rules.md`: beat types, A-roll/graphic ratio, crop states, captions). Execute spoken cues at the moments they describe. For sources longer than ~40 s, scale up: roughly one graphic scene per 6–10 s of speech, never one per sentence. If the content would clearly be stronger shorter, offer a cut-down — don't silently drop the speaker's points.
 
-Build the HyperFrames project following their core contract. The parts that most often go wrong:
+Write `STORYBOARD.md` with one `## Frame N` block per scene (HyperFrames' dispatch format): exact transcript phrase, output start/end, treatment (talking head + crop state, split screen, or graphic interlude + its central metaphor), motion rules cited from `/hyperframes-animation`'s `blueprints-index.md` / `rules-index.md`, and the caption plan. `quick` mode: crop changes and caption emphasis only.
 
-- Each kept source range is its own media clip: `data-media-start` = `src_start`, `data-duration` = `duration`, `data-start` = `out_start` from `timing-map.json`. If audio is separate, it uses the identical ranges.
-- Dialogue continues uninterrupted under graphic interludes.
-- Reframes/punch-ins animate an inner wrapper, never the timed `.clip` element itself.
-- Every graphic scene is its own sub-composition; timelines are paused, seekable, deterministic (no `Date.now()`, unseeded random, timers, or network fetches at render).
-- Fonts load locally and are verified before use (`references/rtl-and-fonts.md`).
-- Search the HyperFrames registry before hand-building a named effect or transition.
+## Step 6 — Build
 
-## Step 6 — Verify, then stop for approval
+Follow `/hyperframes-core`. The details that most often break (see `references/hyperframes-notes.md` for the lint codes):
 
-1. `npx hyperframes lint` after the first structural pass; `npx hyperframes check` at the end with zero unresolved errors.
-2. Snapshot and look at: the first frame, the opening push-in, ±1 frame around every cut, the middle and end of every graphic scene, the final frame. Look for black flashes, missing-font boxes, broken RTL shaping, captions over the face or under platform UI, and lip-sync drift.
-3. Open HyperFrames Studio preview and give the user the URL. **This is the approval gate**: rendering is slow and the user's taste is the final judge. Apply their notes, re-check, and only render after a yes.
+- Reframes/zooms animate an **inner wrapper** around the video, never the timed `.clip`; derive scale origin from the face position you measured.
+- Split screen = the same A-roll wrapper re-cropped into the bottom half (face kept in frame) plus content in the top half; the dialogue never stops.
+- Graphic scenes are sub-compositions; timelines are paused, registered on `window.__timelines`, seekable; no clocks, unseeded random, timers or render-time network.
+- Fonts: a local `@font-face` file for anything non-bundled (`references/rtl-and-fonts.md`).
+- External visuals the speaker asks for (their website, their logo): capture or copy them once into `assets/` before building; never fetch at render time. A website screenshot: `chrome-headless-shell --headless --screenshot=site.png --window-size=540,2400 --force-device-scale-factor=2 --hide-scrollbars <url>` (the binary lives under `~/.cache/hyperframes/chrome/`).
+- Search `npx hyperframes catalog --query "<look>" --json` before hand-building a named effect or transition.
 
-## Step 7 — Render and report
+## Step 7 — Verify, then stop for approval
 
-Render to `final.mp4` (H.264 + AAC), then `ffprobe` it: resolution, fps, codecs, non-zero size, duration matching the composition. Report briefly: original → final duration, number of cuts, scenes, A-roll/graphic ratio, fonts used, anything you were unsure about.
+1. `npx hyperframes lint` after the first structural pass; `npx hyperframes check` at the end with **zero** findings (a lint error disables the layout/contrast audits, so "0 samples" means nothing ran).
+2. `npx hyperframes snapshot --at <t1,t2,…>` and look at: first frame; 25/50/75/100 % of the opening push; ±1 frame at every cut and scene boundary; middle and end of every graphic scene and every list state; every spoken-cue moment; the final hold and last frame. Hunt for black flashes, missing-font boxes, broken Arabic joining, captions over the face or under platform UI, lingering scenes, and lip-sync drift.
+3. For multi-scene work run `/hyperframes-animation`'s `scripts/animation-map.mjs` and read it.
+4. `npx hyperframes preview --background` and give the user the Studio URL. **This is the approval gate** — render only after a yes. Apply notes, re-check, re-preview.
+
+## Step 8 — Render and report
+
+`npx hyperframes render` → `final.mp4`; `ffprobe` it: 1080×1920, expected fps, H.264 + AAC, non-zero size, duration = composition duration. Loudness target about −14 LUFS / −1 dBTP (`/hyperframes-audio`).
+
+Report briefly: original → final duration, removed ranges, spoken cues and how each was executed, scene count, A-roll/graphic ratio, fonts and weights, external assets and where they came from, validation status, anything still uncertain.
 
 ## Stop and say so instead of faking success when
 
 - the footage can't be decoded or there's no clear A-roll;
-- the transcript is still materially uncertain after review;
-- no installed font renders the script correctly;
+- the transcript stays materially uncertain after review;
+- a spoken cue is ambiguous in a way that changes the edit (ask, with your best guess);
+- no available font renders the script correctly;
 - a graphic would require inventing facts, screenshots or numbers you don't have;
 - `hyperframes check` keeps failing.
 
 ## Expectations to set with the user
 
-A 20–40 s reel in `full` mode typically takes 20–40 minutes of agent time and a noticeable share of a usage window; `quick` is much lighter. Output is strong for talking-head content, weaker for multi-camera, cinematic or heavily b-roll-driven edits. Always review before posting.
+A 30 s reel in `full` mode is roughly 20–40 minutes of agent time plus render time (slower on Intel Macs); `quick` is much lighter. Strong for talking-head content; weak for multi-camera, cinematic or b-roll-driven work. Always review before posting.
