@@ -1,6 +1,6 @@
 ---
 name: reel-editor
-description: Edit raw talking-head footage into a finished, publish-ready short video (Reels / TikTok / Shorts, or 16:9) — silence removal, jump cuts, punch-in reframes, word-timed captions, full-screen motion-graphic interludes, split screens, audio leveling, preview, render — built as code with HyperFrames. Also executes editing directions the speaker says out loud in the recording ("cut this shot", "zoom on my face here", "show my website here"), makes voice-only "faceless" versions, and copies the editing style of a reference reel the user links ("edit it like this reel"). Use this whenever the user drops a raw recording and wants it edited, "montaged", cut, captioned, turned into a reel, or "made ready to post", even if they never say HyperFrames. Strong on Arabic/RTL captions (مونتاج، ريلز، شيل الصمت، كابشنز، قص، زوم). Not for generating video from nothing with no footage (use the HyperFrames router), and not for editing an existing NLE project (Premiere/Resolve/CapCut files).
+description: Edit raw talking-head footage into a finished, publish-ready vertical short video (9:16 Reels / TikTok / Shorts) — silence removal, jump cuts, punch-in reframes, word-timed captions, full-screen motion-graphic interludes, split screens, audio leveling, preview, render — built as code with HyperFrames. Also executes editing directions the speaker says out loud in the recording ("cut this shot", "zoom on my face here", "show my website here"), makes voice-only "faceless" versions, and copies the editing style of a reference reel the user links ("edit it like this reel"). Use this whenever the user drops a raw recording and wants it edited, "montaged", cut, captioned, turned into a reel, or "made ready to post", even if they never say HyperFrames. Strong on Arabic/RTL captions (مونتاج، ريلز، شيل الصمت، كابشنز، قص، زوم). Not for generating video from nothing with no footage (use the HyperFrames router), and not for editing an existing NLE project (Premiere/Resolve/CapCut files).
 ---
 
 # Reel Editor
@@ -16,7 +16,7 @@ Work through the steps in order. Each produces an inspectable artifact in the pr
 1. `bash <this-skill>/scripts/preflight.sh` — Node 22+, ffmpeg/ffprobe, Python, faster-whisper, HyperFrames skills. Install what's missing; read `references/hyperframes-notes.md` → *Setup problems* for machines where the normal install fails (no sudo for Homebrew, Intel Macs, Chrome timeouts).
 2. `npx hyperframes doctor` — ffmpeg, Chrome and disk as HyperFrames sees them.
 3. `npx hyperframes usage --json` — note the usage window; a full-mode reel is expensive. Re-check before rendering.
-4. Read `/hyperframes` (router), then `/general-video` (a footage remix — cuts, reframes, captions, interludes — is a custom edit and routes there), then `/hyperframes-core` before writing any HTML. Load `/hyperframes-keyframes` for zooms/punches, `/hyperframes-animation` for scene motion, `/hyperframes-creative` → `typography.md` for fonts, `/media-use` for icons/images/SFX, `/hyperframes-audio` for loudness, `/hyperframes-registry` before hand-building any named effect, `/hyperframes-cli` for commands. Read them; don't reconstruct them from memory.
+4. In `full` / `faceless` mode, read `/hyperframes` (router), then `/general-video` (a footage remix — cuts, reframes, captions, interludes — is a custom edit and routes there), then `/hyperframes-core` before writing any HTML. Load `/hyperframes-keyframes` for zooms/punches, `/hyperframes-animation` for scene motion, `/hyperframes-creative` → `typography.md` for fonts, `/media-use` for icons/images/SFX, `/hyperframes-audio` for loudness, `/hyperframes-registry` before hand-building any named effect, `/hyperframes-cli` for commands. Read them; don't reconstruct them from memory. (`quick` mode skips this — see Step 4b.)
 
 ## Step 1 — Intake (one round of questions at most)
 
@@ -30,8 +30,8 @@ Work through the steps in order. Each produces an inspectable artifact in the pr
 Defaults, confirmed in **one** message only if genuinely ambiguous:
 
 - **Mode** — `full` (default): cuts + captions + reframes + graphic interludes. `quick`: cuts + captions + reframes only; several times cheaper, good for daily posting. `faceless`: the speaker never appears — their voice plays over continuous motion graphics (see `editing-rules.md` → *Faceless mode*). Users ask for it as "without my face", "بدون وجهي", "voice only", "صوت وجرافيك فقط".
-- **Format** — 1080×1920 @ 30 fps unless the user wants otherwise. 30 fps renders twice as fast as 60 and is what Reels/TikTok deliver anyway.
-- **Language** — detect from audio. Arabic/Hebrew/Persian/Urdu → read `references/rtl-and-fonts.md` before any typography.
+- **Format** — 1080×1920 @ 30 fps. 30 fps renders twice as fast as 60 and is what Reels/TikTok deliver anyway. Landscape (16:9), multi-clip input and music beds are not supported yet — say so if asked.
+- **Language** — known after transcription (Step 2); Arabic/Hebrew/Persian/Urdu → read `references/rtl-and-fonts.md` before any typography.
 - **Style** — `references/style-editorial-paper.md`, or `brand.md`, or a described style turned into concrete rules. If the user sends a **reference reel** ("make it like this one"), read `references/style-from-reference.md`: download it, measure it, distill a `STYLE.md` rule table, and rebuild the look with your own material — never its assets.
 
 Scaffold a child project and write `BRIEF.md` there (HyperFrames' router reads it, and it stops later sessions from re-asking):
@@ -56,13 +56,19 @@ npx hyperframes init "<project>/edit" --non-interactive --example=blank --skill=
 ## Step 3 — Cut plan
 
 ```bash
+ffmpeg -i raw.mp4 -af "silencedetect=noise=-38dB:d=0.2" -f null - 2>&1 | grep -o "silence_\(start\|end\): [0-9.]*" | paste - - > silences.txt
 python3 <this-skill>/scripts/plan_cuts.py transcript.json -o timing-map.json \
-  --fps 30 --duration <source seconds> --srt captions.srt
+  --fps 30 --duration <source seconds> --silences silences.txt \
+  --cut <a-b,c-d> --srt captions.srt --bake raw.mp4 edit/assets/aroll.mp4 --clean
 ```
 
-Keeps speech, cuts pauses > `--gap` (0.25 s) leaving `--pad` (0.08 s) of room, snaps to the frame grid, writes `removed` ranges, re-times every word onto the output timeline (`words[].out_start/out_end` — captions use these, never source times), and writes short caption cues. Arithmetic by hand is where edits drift out of sync; use the script.
+Keeps speech, cuts pauses > `--gap` (0.25 s) leaving `--pad` (0.08 s) of room, snaps to the frame grid, writes `removed` ranges and re-times every word onto the output timeline. Arithmetic by hand is where edits drift out of sync; use the script.
 
-Before running it, remove from the word list: head/tail camera-handling, retakes and false starts (keep the best take), and any cue that says to cut something (`references/spoken-cues.md`). Then sanity-check cuts against the contact sheet — don't cut through a gesture that completes a sentence.
+- `--silences`: whisper stretches words across pauses; this splits them back so real pauses get cut and no speech is lost. Always pass it.
+- `--cut`: **the** way to remove anything — camera handling at head/tail, retakes and false starts (keep the best take), stutters, and spoken "cut this" cues (`references/spoken-cues.md`). Edit the word list only to *correct text*, never to remove content (padding would leak the removed audio back in).
+- The composition reads `words[].out_start/out_end` from `timing-map.json`. `captions.srt` is a deliverable (upload it to the platform as a subtitle file); nothing reads it back.
+
+Sanity-check cuts against the contact sheet — don't cut through a gesture that completes a sentence.
 
 ## Step 4 — A-roll
 
@@ -70,6 +76,19 @@ Pick one, and record which in `BRIEF.md`:
 
 - **Baked A-roll** (default for phone/VFR sources, or more than ~10 cuts): `plan_cuts.py … --bake raw.mp4 edit/assets/aroll.mp4 --clean` renders the kept ranges into one constant-frame-rate H.264 file with 10 ms audio fades at every cut and a keyframe every second; `--clean` adds conservative voice cleanup (rumble cut, ~12 dB denoise against the file's measured noise floor, mud cut, presence lift, gentle compression) before loudness normalisation. Use it whenever the recording has room noise or hiss — phone recordings almost always do. The composition then has a single `<video>` from 0 to `output_duration`, which seeks exactly, renders fastest, and can't drift.
 - **Clip-per-range** (CFR sources, few cuts, user wants to re-trim cuts in Studio): one `<video>` per kept range — `data-media-start`=`src_start`, `data-duration`=`duration`, `data-start`=`out_start`, `data-has-audio="true"`, unique `id` on each (`/hyperframes-core` → `creator-editing-recipes.md`).
+
+## Step 4b — Quick mode: generate, don't write
+
+In `quick` mode do **not** hand-author HTML. Generate the whole project:
+
+```bash
+python3 <this-skill>/scripts/build_reel.py --project edit --aroll assets/aroll.mp4 \
+  --timing-map timing-map.json --style style.json --highlights highlights.json --face 0.5,0.3
+```
+
+It writes `index.html` with the opening push-in, crop changes on sentence starts (≥ 3.5 s apart), word-timed captions with Latin runs kept in order, one highlighted word per caption and a soft contrast band. Your only decisions: the face position (from the contact sheet), `style.json` (font file, colours, sizes — see the script's docstring) and `highlights.json` (a list of key words). Then go straight to Step 7. In quick mode, of the HyperFrames skills you only need `/hyperframes-cli` (check, preview, render).
+
+**Free/local option.** `scripts/local_assist.py --timing-map timing-map.json --out-dir edit` asks a local Ollama model for the highlights and for *proposed* name corrections, keeping only answers grounded in the transcript. Corrections are never auto-applied — show them to the user. Transcription, cuts, cleanup, generation and render are already local, so quick mode with `local_assist.py` needs no paid model at all. Full and faceless modes need a strong model (they write and debug hundreds of lines of animation code and inspect frames visually); a small local model is not enough for them.
 
 In `faceless` mode the A-roll is used only for its audio: extract it (`ffmpeg -i aroll.mp4 -vn -c:a copy voice.m4a`) and place it as an `<audio id="voice">` track; no `<video>` at all, so the face can never leak into a frame.
 
@@ -103,7 +122,7 @@ Picture events without sound feel unfinished. Add SFX from `/media-use`'s bundle
 
 ## Step 8 — Render and report
 
-`npx hyperframes render` → `final.mp4`; `ffprobe` it: 1080×1920, expected fps, H.264 + AAC, non-zero size, duration = composition duration. Loudness target about −14 LUFS / −1 dBTP (`/hyperframes-audio`).
+`npx hyperframes render` → `final.mp4`; `ffprobe` it: 1080×1920, expected fps, H.264 + AAC, non-zero size, duration = composition duration. Loudness target about −14 LUFS, true peak ≤ −1 dBTP (the bake aims for −1.5 to absorb AAC overshoot; `/hyperframes-audio`).
 
 Report briefly: original → final duration, removed ranges, spoken cues and how each was executed, scene count, A-roll/graphic ratio, fonts and weights, external assets and where they came from, validation status, anything still uncertain.
 

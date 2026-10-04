@@ -240,14 +240,22 @@ def clean_chain(nf):
             "acompressor=threshold=-22dB:ratio=2.5:attack=10:release=160:makeup=1")
 
 
+def ffmpeg_version():
+    """(major, minor) of the ffmpeg on PATH; (99, 0) for git/unknown builds."""
+    r = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True)
+    m = re.search(r"ffmpeg version n?(\d+)\.(\d+)", r.stdout)
+    return (int(m.group(1)), int(m.group(2))) if m else (99, 0)
+
+
 def bake(m, src, out, fps, lufs=-14.0, clean=None):
     graph = bake_filter(m["ranges"], fps)
     if clean is not None:
         graph = graph.replace("[0:a]asplit", f"[0:a]{clean_chain(clean)},asplit", 1)
     if lufs is not None:  # phone voice is usually far too quiet for social (-14 LUFS, -1 dBTP)
         graph = graph.replace("[v][a]", f"[v][a0];[a0]loudnorm=I={lufs}:TP=-1.5:LRA=11[a]")
+    cfr = ["-fps_mode", "cfr"] if ffmpeg_version() >= (5, 1) else ["-vsync", "cfr"]  # -fps_mode is 5.1+
     cmd = ["ffmpeg", "-v", "error", "-y", "-i", src, "-filter_complex", graph,
-           "-map", "[v]", "-map", "[a]", "-r", f"{fps:.6g}", "-fps_mode", "cfr",
+           "-map", "[v]", "-map", "[a]", "-r", f"{fps:.6g}", *cfr,
            "-c:v", "libx264", "-crf", "16", "-preset", "medium", "-pix_fmt", "yuv420p",
            "-g", str(max(1, round(fps))),  # keyframe every second: fast, exact seeking in preview
            "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-movflags", "+faststart", out]

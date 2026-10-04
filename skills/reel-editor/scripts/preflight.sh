@@ -15,16 +15,26 @@ else bad "node" "https://nodejs.org (22+)"; fi
 for t in ffmpeg ffprobe; do
   command -v $t >/dev/null && ok "$t" || bad "$t" "macOS: brew install ffmpeg (no sudo? conda create -n ffmpeg -c conda-forge ffmpeg) | Windows: winget install ffmpeg | Linux: apt install ffmpeg"
 done
+if command -v ffmpeg >/dev/null; then
+  v=$(ffmpeg -version | head -1 | sed -E 's/^ffmpeg version n?([0-9]+)\.([0-9]+).*/\1 \2/')
+  set -- $v
+  if [ "${1:-99}" -lt 5 ] 2>/dev/null; then warn "ffmpeg $1.$2" "works (plan_cuts falls back to -vsync) but 5.1+ is recommended"; fi
+fi
+command -v yt-dlp >/dev/null && ok "yt-dlp" || warn "yt-dlp" "only for copying a reference reel's style: pip install yt-dlp"
 
 command -v python3 >/dev/null && ok "python3 $(python3 -V 2>&1 | cut -d' ' -f2)" || bad "python3" "https://python.org"
 
 # the shell's python3 may not be the one with faster-whisper (e.g. conda not on PATH in a new session)
 fw=""
-for py in python3 ~/miniconda3/bin/python3 ~/anaconda3/bin/python3 /opt/homebrew/bin/python3 /usr/local/bin/python3; do
+for py in python3 ~/.venvs/reel/bin/python3 ~/miniconda3/bin/python3 ~/anaconda3/bin/python3 /opt/homebrew/bin/python3 /usr/local/bin/python3; do
   "$py" -c 'import faster_whisper' 2>/dev/null && fw=$(command -v "$py" 2>/dev/null || echo "$py") && break
 done
 if [ -n "$fw" ]; then ok "faster-whisper  (use: $fw)"
-else warn "faster-whisper" "pip install faster-whisper (only needed if HyperFrames /media-use transcription is unavailable)"; fi
+else bad "faster-whisper" "python3 -m pip install faster-whisper  (\"externally-managed-environment\"? use: python3 -m venv ~/.venvs/reel && ~/.venvs/reel/bin/pip install faster-whisper)  — first run downloads the large-v3 model (~3 GB)"; fi
+
+# optional: free local decisions for quick mode
+if command -v ollama >/dev/null; then ok "ollama (quick mode can run free: scripts/local_assist.py)"
+else warn "ollama" "optional — free local highlights/corrections in quick mode: https://ollama.com"; fi
 
 # HyperFrames skills: plugin install or standalone skills folder
 found=0

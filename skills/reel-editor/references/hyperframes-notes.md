@@ -43,7 +43,7 @@ A lint **error** switches off the layout and contrast audits — "0 samples" the
 
 ## Fonts
 
-- Bundled families render offline with no setup. Google Fonts names are fetched once at build time and cached (`~/.cache/hyperframes/fonts`). Locally installed families are auto-captured in local renders but **not** in cloud/Lambda renders.
+- Bundled families render offline with no setup. Google Fonts names are fetched once at *build* time and cached (`~/.cache/hyperframes/fonts`) — acceptable for Latin fallbacks like Montserrat; for the main Arabic face prefer a local `@font-face` file (`rtl-and-fonts.md`), which never depends on the network. Locally installed families are auto-captured in local renders but **not** in cloud/Lambda renders.
 - For Arabic, a local `@font-face` file is the reliable path. On macOS, `SF Arabic` (`/System/Library/Fonts/SFArabic.ttf`, variable weight) is always present and looks good; copy it into `assets/` for local renders (it's licensed for use on Apple hardware — don't redistribute the file).
 - Latin words inside Arabic (product names) can use a bundled family such as Montserrat via a `.lat` class with `direction: ltr; unicode-bidi: isolate`.
 
