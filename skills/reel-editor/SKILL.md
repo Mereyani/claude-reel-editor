@@ -42,7 +42,7 @@ npx hyperframes init "<project>/edit" --non-interactive --example=blank --skill=
 
 ## Step 2 — Understand the source
 
-1. `ffprobe` → `source-analysis.md`: duration, resolution, `r_frame_rate` **and** `avg_frame_rate`, codecs, audio rate/channels. If they differ the file is variable-frame-rate (phones, WhatsApp, screen recorders) — plan to bake a CFR A-roll in Step 4. If the resolution is far below 1080 wide (WhatsApp re-encodes to ~480p), say so and suggest the user send the camera original next time; continue with what you have.
+1. Audio-only file (voice memo)? → `faceless` mode; see `hyperframes-notes.md` → *Audio-only sources* (raw `.aac` durations from ffprobe are wrong). Otherwise `ffprobe` → `source-analysis.md`: duration, resolution, `r_frame_rate` **and** `avg_frame_rate`, codecs, audio rate/channels. If they differ the file is variable-frame-rate (phones, WhatsApp, screen recorders) — plan to bake a CFR A-roll in Step 4. If the resolution is far below 1080 wide (WhatsApp re-encodes to ~480p), say so and suggest the user send the camera original next time; continue with what you have.
 2. Contact sheet with timestamps, then **look at it**:
    `ffmpeg -i src -vf "fps=1,scale=240:-1,drawtext=text='%{pts\:hms}':x=4:y=4:fontsize=18:fontcolor=yellow:box=1:boxcolor=black@0.6,tile=8x5" sheet_%02d.jpg`
    Note: camera-setup/teardown frames at head and tail, where the face sits (for crop math), headroom, gestures, and **where the speaker points** when they say "here".

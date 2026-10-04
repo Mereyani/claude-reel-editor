@@ -204,32 +204,44 @@ def write_srt(cues, path):
             f.write(f"{i}\n{ts(a)} --> {ts(b)}\n{text}\n\n")
 
 
-def bake_filter(ranges, fps=30, fade=0.01):
+def bake_filter(ranges, fps=30, fade=0.01, video=True):
     """ffmpeg filtergraph: resample to CFR first (VFR phone footage would otherwise gain or lose
-    a frame per cut and drift out of sync), trim every kept range, 10 ms audio fades, concat."""
+    a frame per cut and drift out of sync), trim every kept range, 10 ms audio fades, concat.
+    video=False handles audio-only sources (voice memos for faceless reels)."""
     n = len(ranges)
-    parts = [f"[0:v]fps={fps:.6g},split={n}" + "".join(f"[sv{i}]" for i in range(n)),
-             f"[0:a]asplit={n}" + "".join(f"[sa{i}]" for i in range(n))]
+    parts = [f"[0:a]asplit={n}" + "".join(f"[sa{i}]" for i in range(n))]
+    if video:
+        parts.insert(0, f"[0:v]fps={fps:.6g},split={n}" + "".join(f"[sv{i}]" for i in range(n)))
     labels = []
     for i, r in enumerate(ranges):
         a, b, d = r["src_start"], r["src_end"], r["duration"]
-        parts.append(f"[sv{i}]trim=start={a}:end={b},setpts=PTS-STARTPTS[v{i}]")
+        if video:
+            parts.append(f"[sv{i}]trim=start={a}:end={b},setpts=PTS-STARTPTS[v{i}]")
         parts.append(f"[sa{i}]atrim=start={a}:end={b},asetpts=PTS-STARTPTS,"
                      f"afade=t=in:d={fade},afade=t=out:st={max(d - fade, 0):.4f}:d={fade}[a{i}]")
-        labels.append(f"[v{i}][a{i}]")
-    parts.append(f"{''.join(labels)}concat=n={len(ranges)}:v=1:a=1[v][a]")
+        labels.append(f"[v{i}][a{i}]" if video else f"[a{i}]")
+    parts.append(f"{''.join(labels)}concat=n={n}:v={int(video)}:a=1" + ("[v][a]" if video else "[a]"))
     return ";".join(parts)
 
 
+def has_video(src):
+    r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v", "-show_entries", "stream=index",
+                        "-of", "csv=p=0", src], capture_output=True, text=True)
+    return bool(r.stdout.strip())
+
+
 def noise_floor(src):
-    """Room/hiss level to denoise against: astats' overall "Noise floor dB" (the quietest
-    windowed RMS in the whole file). Detected "pauses" are a poor proxy - they often hold
-    breaths or camera handling."""
-    r = subprocess.run(["ffmpeg", "-hide_banner", "-i", src, "-vn", "-af", "astats=metadata=0", "-f", "null", "-"],
+    """Room/hiss level to denoise against: the 10th percentile of per-window RMS over the whole
+    file, ignoring digital silence (exact zeros read as -inf; recordings often start with them).
+    Detected "pauses" are a poor proxy - they often hold breaths or camera handling."""
+    r = subprocess.run(["ffmpeg", "-hide_banner", "-i", src, "-vn", "-af",
+                        "aresample=16000,asetnsamples=n=4000,astats=metadata=1:reset=1,"
+                        "ametadata=print:key=lavfi.astats.Overall.RMS_level", "-f", "null", "-"],
                        capture_output=True, text=True)
-    vals = re.findall(r"Noise floor dB:\s*(-?[0-9.]+)", r.stderr)
-    v = float(vals[-1]) if vals else -50.0  # last match = "Overall"
-    return max(-70.0, min(-25.0, v))
+    vals = sorted(float(v) for v in re.findall(r"RMS_level=(-?[0-9.]+)", r.stderr) if float(v) > -120)
+    if not vals:
+        return -50.0
+    return max(-70.0, min(-25.0, vals[len(vals) // 10]))
 
 
 def clean_chain(nf):
@@ -248,17 +260,24 @@ def ffmpeg_version():
 
 
 def bake(m, src, out, fps, lufs=-14.0, clean=None):
-    graph = bake_filter(m["ranges"], fps)
+    video = has_video(src)
+    graph = bake_filter(m["ranges"], fps, video=video)
     if clean is not None:
         graph = graph.replace("[0:a]asplit", f"[0:a]{clean_chain(clean)},asplit", 1)
     if lufs is not None:  # phone voice is usually far too quiet for social (-14 LUFS, -1 dBTP)
-        graph = graph.replace("[v][a]", f"[v][a0];[a0]loudnorm=I={lufs}:TP=-1.5:LRA=11[a]")
+        tail = "[v][a]" if video else "[a]"
+        graph = graph[: -len(tail)] + ("[v]" if video else "") + f"[a0];[a0]loudnorm=I={lufs}:TP=-1.5:LRA=11[a]"
+    aout = ["-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-movflags", "+faststart", out]
+    if not video:  # audio-only source: write the cut, cleaned voice track (use a .m4a name)
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", src, "-filter_complex", graph, "-map", "[a]", *aout],
+                       check=True)
+        return
     cfr = ["-fps_mode", "cfr"] if ffmpeg_version() >= (5, 1) else ["-vsync", "cfr"]  # -fps_mode is 5.1+
     cmd = ["ffmpeg", "-v", "error", "-y", "-i", src, "-filter_complex", graph,
            "-map", "[v]", "-map", "[a]", "-r", f"{fps:.6g}", *cfr,
            "-c:v", "libx264", "-crf", "16", "-preset", "medium", "-pix_fmt", "yuv420p",
            "-g", str(max(1, round(fps))),  # keyframe every second: fast, exact seeking in preview
-           "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-movflags", "+faststart", out]
+           *aout]
     subprocess.run(cmd, check=True)
 
 
@@ -312,6 +331,8 @@ def selftest():
     mh = plan(tw2, gap=0.25, pad=0.08, duration=3.0, cuts=[(0, 2.0)])
     assert [w["text"] for w in mh["words"]] == ["hi"], mh["words"]
     assert clean_chain(-48).startswith("highpass") and "nf=-48" in clean_chain(-48)
+    ao = bake_filter(m["ranges"], video=False)
+    assert "[0:v]" not in ao and ao.endswith("concat=n=2:v=0:a=1[a]"), ao
     assert "concat=n=2" in bake_filter(m["ranges"]) and "atrim=start=2.92:end=3.73" in bake_filter(m["ranges"])
     print("plan_cuts selftest: OK")
 
@@ -360,7 +381,7 @@ def main():
         if nf is not None:
             print(f"voice cleanup: noise floor {nf:.1f} dBFS")
         bake(m, *a.bake, a.fps, None if math.isnan(a.lufs) else a.lufs, nf)
-        print(f"A-roll ({a.fps:.6g} fps CFR, cuts baked) -> {a.bake[1]}")
+        print(f"baked (cuts applied; CFR {a.fps:.6g} fps if video) -> {a.bake[1]}")
 
 
 if __name__ == "__main__":

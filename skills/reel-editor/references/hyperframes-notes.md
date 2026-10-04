@@ -21,6 +21,17 @@ Things learned from real runs that the docs don't put in one place. HyperFrames'
 - In zsh, `set -- $w` does not split a string into words; use `a=(${=w})`.
 - astats prints per-channel blocks then `Overall`; take values after the `Overall` line. "Noise floor dB" (overall, whole file) is the right denoise reference — detected "pauses" often hold breaths or camera handling.
 
+## Audio-only sources (voice memos)
+
+- A voice memo has no video: it can only become a `faceless` reel. `plan_cuts.py --bake memo.aac voice.m4a --clean` detects the missing video stream and writes the cut, cleaned voice track directly.
+- Raw ADTS `.aac` (phone recorders) has **no reliable duration in its header**: ffprobe estimated 95.7 s for a 100.2 s file. Measure the decoded length (`ffprobe` on the 16 kHz wav you transcribe from, or `ffmpeg -i f -f null -` → last `time=`) and pass that as `--duration`, or the tail of the speech is silently dropped.
+- Recordings often start with digital silence (exact zeros). The denoise reference is therefore the 10th percentile of per-window RMS, ignoring −inf windows — "quietest window" would be −∞.
+- Don't re-transcribe clips shorter than ~6 s to fix one word: Whisper hallucinates whole sentences on short clips ("اشتركوا في القناة"). Re-run a wider window and compare.
+
+## Fonts outside the bundle
+
+A frame preset may name a display face that is neither bundled nor auto-resolved (bold-poster's Shrikhand failed `check` with `font_family_without_font_face`). Either ship the font file in `assets/` with an `@font-face`, or substitute the closest bundled face (Archivo Black for heavy display Latin) and say so in the report. Latin-only display faces never cover Arabic: pair them with a heavy Arabic face (SF Arabic 900) at the same tilt.
+
 ## Source footage
 
 - Phone / WhatsApp video is usually variable frame rate (`r_frame_rate` ≠ `avg_frame_rate`) and WhatsApp re-encodes to ~480p. Bake a CFR A-roll (`plan_cuts.py --bake`), which resamples *before* trimming so every cut lands on an exact frame and audio stays in sync to the millisecond.
